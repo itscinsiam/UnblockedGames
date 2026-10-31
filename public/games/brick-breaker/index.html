@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Brick Breaker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: #090d16;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #game-container {
+      position: relative;
+      width: 460px;
+      height: 540px;
+      max-width: 95vw;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #334155;
+      background: #0d1322;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    }
+    canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+    .hud {
+      position: absolute;
+      top: 12px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      font-weight: 700;
+      color: #94a3b8;
+      pointer-events: none;
+    }
+    .hud-val { color: #f59e0b; }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(13, 19, 34, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .btn {
+      background: #f59e0b;
+      color: #0f172a;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn:hover { background: #fbbf24; transform: scale(1.05); }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="canvas" width="460" height="540"></canvas>
+    <div class="hud">
+      <div>SCORE: <span class="hud-val" id="score">0</span></div>
+      <div>LIVES: <span class="hud-val" id="lives">3</span></div>
+      <div>BRICKS: <span class="hud-val" id="bricks-left">0</span></div>
+    </div>
+    <div class="overlay" id="overlay">
+      <h1 id="overlay-title" style="font-size: 30px; color: #f59e0b;">BRICK BREAKER</h1>
+      <p style="color: #94a3b8; font-size: 14px;">Move mouse / finger or Arrow Keys to control paddle</p>
+      <button class="btn" id="start-btn">Start Game</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const overlayTitle = document.getElementById('overlay-title');
+    const startBtn = document.getElementById('start-btn');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const bricksLeftEl = document.getElementById('bricks-left');
+
+    let paddle = { x: 190, y: 500, w: 80, h: 12, speed: 7 };
+    let ball = { x: 230, y: 480, r: 6, vx: 3.5, vy: -4, speed: 5.5 };
+    let bricks = [];
+    let score = 0;
+    let lives = 3;
+    let isRunning = false;
+    let keys = {};
+
+    function initBricks() {
+      bricks = [];
+      const rows = 5;
+      const cols = 8;
+      const bw = 48;
+      const bh = 18;
+      const padding = 6;
+      const offsetTop = 50;
+      const offsetLeft = 16;
+      const colors = ['#ef4444', '#f97316', '#eab308', '#10b981', '#3b82f6'];
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          bricks.push({
+            x: offsetLeft + c * (bw + padding),
+            y: offsetTop + r * (bh + padding),
+            w: bw,
+            h: bh,
+            color: colors[r],
+            alive: true,
+            pts: (rows - r) * 10
+          });
+        }
+      }
+      bricksLeftEl.textContent = bricks.length;
+    }
+
+    function resetGame() {
+      score = 0;
+      lives = 3;
+      scoreEl.textContent = '0';
+      livesEl.textContent = '3';
+      paddle.x = (canvas.width - paddle.w) / 2;
+      resetBall();
+      initBricks();
+      overlay.style.display = 'none';
+      isRunning = true;
+    }
+
+    function resetBall() {
+      ball.x = paddle.x + paddle.w / 2;
+      ball.y = paddle.y - 12;
+      ball.vx = (Math.random() > 0.5 ? 1 : -1) * 3.5;
+      ball.vy = -4.5;
+    }
+
+    function update() {
+      if (!isRunning) return;
+
+      // Paddle keyboard
+      if (keys['ArrowLeft'] || keys['KeyA']) paddle.x = Math.max(0, paddle.x - paddle.speed);
+      if (keys['ArrowRight'] || keys['KeyD']) paddle.x = Math.min(canvas.width - paddle.w, paddle.x + paddle.speed);
+
+      // Move ball
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Ball wall bounces
+      if (ball.x - ball.r <= 0) { ball.x = ball.r; ball.vx *= -1; }
+      if (ball.x + ball.r >= canvas.width) { ball.x = canvas.width - ball.r; ball.vx *= -1; }
+      if (ball.y - ball.r <= 0) { ball.y = ball.r; ball.vy *= -1; }
+
+      // Bottom death
+      if (ball.y + ball.r >= canvas.height) {
+        lives--;
+        livesEl.textContent = lives;
+        if (lives <= 0) {
+          endGame(false);
+          return;
+        } else {
+          resetBall();
+        }
+      }
+
+      // Paddle bounce
+      if (ball.y + ball.r >= paddle.y && ball.y - ball.r <= paddle.y + paddle.h &&
+          ball.x >= paddle.x && ball.x <= paddle.x + paddle.w) {
+        ball.vy = -Math.abs(ball.vy);
+        const hitPos = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
+        ball.vx = hitPos * 5.5;
+      }
+
+      // Brick collisions
+      let remaining = 0;
+      for (let b of bricks) {
+        if (!b.alive) continue;
+        remaining++;
+        if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
+            ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
+          b.alive = false;
+          score += b.pts;
+          scoreEl.textContent = score;
+          ball.vy *= -1;
+          remaining--;
+          break;
+        }
+      }
+      bricksLeftEl.textContent = remaining;
+
+      if (remaining === 0) {
+        endGame(true);
+      }
+    }
+
+    function endGame(win) {
+      isRunning = false;
+      overlayTitle.textContent = win ? 'VICTORY!' : 'GAME OVER';
+      overlayTitle.style.color = win ? '#10b981' : '#ef4444';
+      startBtn.textContent = 'Play Again';
+      overlay.style.display = 'flex';
+    }
+
+    function draw() {
+      ctx.fillStyle = '#0d1322';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Paddle
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.roundRect(paddle.x, paddle.y, paddle.w, paddle.h, 6);
+      ctx.fill();
+
+      // Ball
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bricks
+      bricks.forEach(b => {
+        if (!b.alive) return;
+        ctx.fillStyle = b.color;
+        ctx.beginPath();
+        ctx.roundRect(b.x, b.y, b.w, b.h, 4);
+        ctx.fill();
+      });
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('keydown', e => { keys[e.code] = true; });
+    window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const mouseX = (e.clientX - rect.left) * scaleX;
+      paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, mouseX - paddle.w / 2));
+    });
+
+    canvas.addEventListener('touchmove', e => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const touchX = (e.touches[0].clientX - rect.left) * scaleX;
+      paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, touchX - paddle.w / 2));
+    }, { passive: true });
+
+    startBtn.addEventListener('click', resetGame);
+    initBricks();
+    loop();
+  </script>
+</body>
+</html>

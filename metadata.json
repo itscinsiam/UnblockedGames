@@ -1,0 +1,6 @@
+{
+  "name": "Vortex Arcade",
+  "description": "Fast unblocked games website with iframe-based game repository, tab cloaking, custom game loader, and full-screen support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
